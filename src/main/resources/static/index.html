@@ -1,0 +1,158 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fraud Detection Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f0f9ff;
+            color: #123047;
+            margin: 0;
+            padding: 30px;
+        }
+        h1 { color: #0284c7; }
+        .card {
+            background: white;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px #dbeafe;
+        }
+        input, button {
+            padding: 10px;
+            margin: 6px 3px;
+            border: 1px solid #bae6fd;
+            border-radius: 6px;
+        }
+        button {
+            background: #0284c7;
+            color: white;
+            cursor: pointer;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px; border-bottom: 1px solid #ddd; text-align: left; }
+        .fraud { color: #dc2626; font-weight: bold; }
+        .safe { color: #15803d; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Real-Time Fraud Detection Dashboard</h1>
+
+    <div class="card">
+        <h2>Submit Transaction</h2>
+        <form id="transactionForm">
+            <input id="customerId" placeholder="Customer ID" required>
+            <input id="amount" type="number" min="0" step="0.01" placeholder="Amount" required>
+            <input id="currency" placeholder="Currency (INR)" value="INR" required>
+            <input id="merchant" placeholder="Merchant" required>
+            <input id="country" placeholder="Country (XX triggers alert)" required>
+            <button type="submit">Submit Transaction</button>
+        </form>
+        <p id="message"></p>
+    </div>
+
+    <div class="card">
+        <h2>Transactions</h2>
+        <button onclick="loadTransactions()">Refresh Transactions</button>
+        <table>
+            <thead>
+                <tr><th>ID</th><th>Customer</th><th>Amount</th><th>Merchant</th><th>Country</th><th>Status</th></tr>
+            </thead>
+            <tbody id="transactions"></tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Fraud Alerts</h2>
+        <button onclick="loadAlerts()">Refresh Alerts</button>
+        <ul id="alerts"></ul>
+    </div>
+
+    <script>
+        const api = "/api";
+
+        document.getElementById("transactionForm").addEventListener("submit", async function(event) {
+            event.preventDefault();
+
+            const transaction = {
+                customerId: document.getElementById("customerId").value,
+                amount: Number(document.getElementById("amount").value),
+                currency: document.getElementById("currency").value,
+                merchant: document.getElementById("merchant").value,
+                country: document.getElementById("country").value
+            };
+
+            try {
+                const response = await fetch(api + "/transactions", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(transaction)
+                });
+
+                if (!response.ok) throw new Error("Request failed");
+                const result = await response.json();
+
+                document.getElementById("message").textContent =
+                    result.fraudulent ? "Fraud alert detected!" : "Transaction submitted successfully.";
+                loadTransactions();
+                loadAlerts();
+            } catch (error) {
+                document.getElementById("message").textContent =
+                    "Could not connect. Start the Spring Boot application first.";
+            }
+        });
+
+        async function loadTransactions() {
+            try {
+                const response = await fetch(api + "/transactions");
+                if (!response.ok) throw new Error("Request failed");
+                const data = await response.json();
+
+                document.getElementById("transactions").innerHTML = data.map(t => `
+                    <tr>
+                        <td>${t.id ?? ""}</td>
+                        <td>${escapeHtml(t.customerId)}</td>
+                        <td>${t.amount} ${escapeHtml(t.currency)}</td>
+                        <td>${escapeHtml(t.merchant)}</td>
+                        <td>${escapeHtml(t.country)}</td>
+                        <td class="${t.fraudulent ? "fraud" : "safe"}">
+                            ${t.fraudulent ? "FRAUD" : "SAFE"}
+                        </td>
+                    </tr>
+                `).join("");
+            } catch (error) {
+                document.getElementById("transactions").innerHTML =
+                    "<tr><td colspan='6'>Unable to load transactions.</td></tr>";
+            }
+        }
+
+        async function loadAlerts() {
+            try {
+                const response = await fetch(api + "/alerts");
+                if (!response.ok) throw new Error("Request failed");
+                const data = await response.json();
+
+                document.getElementById("alerts").innerHTML = data.map(t =>
+                    `<li class="fraud">Transaction #${t.id} — ${escapeHtml(t.customerId)} — ${t.amount}</li>`
+                ).join("") || "<li>No fraud alerts.</li>";
+            } catch (error) {
+                document.getElementById("alerts").innerHTML =
+                    "<li>Unable to load alerts.</li>";
+            }
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? "").replace(/[&<>"']/g, char => ({
+                "&": "&amp;", "<": "&lt;", ">": "&gt;",
+                '"': "&quot;", "'": "&#39;"
+            })[char]);
+        }
+
+        loadTransactions();
+        loadAlerts();
+    </script>
+</body>
+</html>
